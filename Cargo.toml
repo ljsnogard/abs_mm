@@ -1,13 +1,13 @@
 ﻿[package]
 name = "abs_mm"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 authors = ["lino <lino_snsalias@outlook.com>"]
 description = "Abstract Memory Management"
 homepage = "https://github.com/ljsnogard/abs_mm"
-keywords = ["traits"]
-categories = ["no-std"]
+keywords = ["traits", "smart-pointer"]
+categories = ["no-std", "memory-management"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 

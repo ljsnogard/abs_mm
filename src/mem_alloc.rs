@@ -1,5 +1,6 @@
 ﻿use core::{
     alloc::Layout,
+    error, fmt,
     ptr::NonNull,
 };
 
@@ -55,9 +56,9 @@ impl FakeMalloc {
         &FAKE_ALLOC
     }
 
-    /// It will return true only if layout.size is zero
-    pub fn can_support(&self, layout: Layout) -> bool {
-        layout.size() == 0usize
+    /// Will always returns false for any layout
+    pub fn can_support(&self, _: Layout) -> bool {
+        false
     }
 
     /// It will always return `Err`
@@ -67,7 +68,7 @@ impl FakeMalloc {
 
     /// Do nothing but return `Result::Ok(0)`
     ///
-    /// ## Safety
+    /// # Safety
     ///
     /// - This is not designed to be called manually.
     pub unsafe fn deallocate(
@@ -105,6 +106,14 @@ unsafe impl TrMalloc for FakeMalloc {
         FakeMalloc::deallocate(self, ptr, layout)
     }
 }
+
+impl fmt::Display for FakeMallocError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "FakeMallocError")
+    }
+}
+
+impl error::Error for FakeMallocError {}
 
 #[cfg(feature = "support-std")]
 pub use crate::std_global_::{StdGlobalAlloc, StdGlobalAllocError};

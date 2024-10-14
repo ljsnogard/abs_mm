@@ -5,6 +5,7 @@ use crate::mem_alloc::TrMalloc;
 #[cfg(feature = "support-std")]
 use crate::std_global_::StdGlobalAlloc;
 
+/// Smart pointers that can retrieve its memory allocator.
 pub trait TrBoxed
 where
     Self: Sized + Deref,
@@ -14,6 +15,8 @@ where
     fn malloc(&self) -> &Self::Malloc;
 }
 
+/// A trait describing smart pointers that share the ownership of the resource
+/// with reference counting.
 pub trait TrShared
 where
     Self: TrBoxed + Clone,
@@ -23,6 +26,7 @@ where
     fn weak_count(&self) -> usize;
 }
 
+/// A trait describing smart pointers with a unique owner.
 pub trait TrUnique
 where
     Self: TrBoxed + DerefMut,
