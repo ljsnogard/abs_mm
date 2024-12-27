@@ -5,14 +5,19 @@ edition = "2021"
 
 authors = ["lino <lino_snsalias@outlook.com>"]
 description = "Abstract Memory Management"
-homepage = "https://github.com/ljsnogard/abs_mm"
+repository = "https://github.com/ljsnogard/abs_mm"
 keywords = ["traits", "smart-pointer"]
 categories = ["no-std", "memory-management"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 
 [features]
-support-std = []
+std_smart_pointers = ["arc", "box", "rc"]
+arc = ["std", "global_alloc"]
+box = ["std", "global_alloc"]
+rc = ["std", "global_alloc"]
+global_alloc = []
+std = []
 default = []
 
 [dev-dependencies]

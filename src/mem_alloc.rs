@@ -115,5 +115,5 @@ impl fmt::Display for FakeMallocError {
 
 impl error::Error for FakeMallocError {}
 
-#[cfg(feature = "support-std")]
+#[cfg(feature = "global_alloc")]
 pub use crate::std_global_::{StdGlobalAlloc, StdGlobalAllocError};

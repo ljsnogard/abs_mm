@@ -8,7 +8,7 @@ use crate::mem_alloc::{MemAddr, TrMalloc};
 pub struct StdGlobalAlloc;
 
 impl StdGlobalAlloc {
-    #[cfg(feature = "support-std")]
+    #[cfg(feature = "global_alloc")]
     pub fn shared() -> &'static StdGlobalAlloc {
         static GLOBAL_ALLOC: StdGlobalAlloc = StdGlobalAlloc;
         &GLOBAL_ALLOC
