@@ -1,6 +1,7 @@
 ﻿use core::{
     alloc::Layout,
-    error, fmt,
+    error,
+    fmt,
     ptr::NonNull,
 };
 
@@ -25,7 +26,7 @@ pub(crate) type MemAddr = NonNull<[u8]>;
 /// * any pointer to a memory block which is currently allocated may be passed
 ///   to any other method of the allocator.
 pub unsafe trait TrMalloc {
-    type Err;
+    type Err: error::Error;
 
     fn can_support(&self, layout: Layout) -> bool;
 
@@ -98,12 +99,8 @@ unsafe impl TrMalloc for FakeMalloc {
     }
 
     #[inline(always)]
-    unsafe fn deallocate(
-        &self,
-        ptr: MemAddr,
-        layout: Layout,
-    ) -> Result<usize, FakeMallocError> {
-        FakeMalloc::deallocate(self, ptr, layout)
+    unsafe fn deallocate(&self, ptr: MemAddr, layout: Layout) -> Result<usize, FakeMallocError> {
+        unsafe { FakeMalloc::deallocate(self, ptr, layout) }
     }
 }
 
@@ -115,5 +112,5 @@ impl fmt::Display for FakeMallocError {
 
 impl error::Error for FakeMallocError {}
 
-#[cfg(feature = "support-std")]
-pub use crate::std_global_::{StdGlobalAlloc, StdGlobalAllocError};
+#[cfg(any(test, feature = "core_alloc"))]
+pub use crate::core_alloc_::{CoreAlloc, CoreAllocError};
