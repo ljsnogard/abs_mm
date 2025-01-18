@@ -62,7 +62,17 @@ impl StdGlobalAlloc {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
 pub struct StdGlobalAllocError;
+
+impl core::fmt::Display for StdGlobalAllocError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "StdGlobalAllocError")
+    }
+}
+
+impl core::error::Error for StdGlobalAllocError
+{}
 
 unsafe impl TrMalloc for StdGlobalAlloc {
     type Err = StdGlobalAllocError;

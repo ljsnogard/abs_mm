@@ -1,6 +1,7 @@
 ﻿use core::{
     alloc::Layout,
-    error, fmt,
+    error,
+    fmt,
     ptr::NonNull,
 };
 
@@ -25,7 +26,7 @@ pub(crate) type MemAddr = NonNull<[u8]>;
 /// * any pointer to a memory block which is currently allocated may be passed
 ///   to any other method of the allocator.
 pub unsafe trait TrMalloc {
-    type Err;
+    type Err: error::Error;
 
     fn can_support(&self, layout: Layout) -> bool;
 
