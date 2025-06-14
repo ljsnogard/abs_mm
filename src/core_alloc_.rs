@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::alloc::{alloc, dealloc};
 
 use core::{
-    alloc::Layout,
+    alloc::{Layout, LayoutError},
     error, fmt,
     ptr::{self, NonNull},
 };
@@ -12,8 +12,55 @@ use crate::mem_alloc::TrMalloc;
 
 type MemAddr = NonNull<[u8]>;
 
+#[derive(Debug, Clone, Copy)]
+pub enum AllocErrorMessage {
+    NullPtrReturned,
+    Unknown,
+}
+
+impl Default for AllocErrorMessage {
+    fn default() -> Self {
+        AllocErrorMessage::Unknown
+    }
+}
+
+impl fmt::Display for AllocErrorMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let m = match self {
+            AllocErrorMessage::NullPtrReturned => "Allocator_Returns_Null_Ptr",
+            AllocErrorMessage::Unknown => "Allocator_Unknown_Err",
+        };
+        write!(f, "{m}")
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct CoreAllocError;
+pub enum CoreAllocError {
+    LayoutErr(LayoutError),
+    AllocErr(AllocErrorMessage),
+}
+
+impl CoreAllocError {
+    pub const fn from_alloc_err(msg: AllocErrorMessage) -> Self {
+        CoreAllocError::AllocErr(msg)
+    }
+
+    pub const fn from_layout_err(err: LayoutError) -> Self {
+        CoreAllocError::LayoutErr(err)
+    }
+}
+
+impl From<LayoutError> for CoreAllocError {
+    fn from(value: LayoutError) -> Self {
+        Self::from_layout_err(value)
+    }
+}
+
+impl From<AllocErrorMessage> for CoreAllocError {
+    fn from(value: AllocErrorMessage) -> Self {
+        Self::from_alloc_err(value)
+    }
+}
 
 impl fmt::Display for CoreAllocError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -42,27 +89,23 @@ impl CoreAlloc {
         true
     }
 
-    pub fn allocate(
-        &self,
-        layout: Layout,
-    ) -> Result<MemAddr, CoreAllocError> {
+    pub fn allocate(&self, layout: Layout) -> Result<MemAddr, CoreAllocError> {
         unsafe {
-            if let Option::Some(p) = NonNull::new(alloc(layout)) {
-                #[cfg(test)]
-                log::trace!(
-                    "[CoreAlloc::allocate]({}, {}) returns {:?}",
-                    layout.size(),
-                    layout.align(),
-                    p.as_ptr()
-                );
-                let slice = ptr::slice_from_raw_parts_mut(
-                    p.as_ptr(),
-                    layout.size(),
-                );
-                Result::Ok(NonNull::new_unchecked(slice))
-            } else {
-                Result::Err(CoreAllocError)
-            }
+            let Option::Some(p) = NonNull::new(alloc(layout)) else {
+                return Result::Err(AllocErrorMessage::NullPtrReturned.into())
+            };
+            #[cfg(test)]
+            log::trace!(
+                "[CoreAlloc::allocate]({}, {}) returns {:?}",
+                layout.size(),
+                layout.align(),
+                p.as_ptr()
+            );
+            let slice = ptr::slice_from_raw_parts_mut(
+                p.as_ptr(),
+                layout.size(),
+            );
+            Result::Ok(NonNull::new_unchecked(slice))
         }
     }
 
