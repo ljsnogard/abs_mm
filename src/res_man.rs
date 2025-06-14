@@ -1,9 +1,8 @@
-﻿use core::ops::{Deref, DerefMut};
+﻿extern crate alloc;
 
-use crate::mem_alloc::TrMalloc;
+use core::ops::{Deref, DerefMut};
 
-#[cfg(feature = "global_alloc")]
-use crate::std_global_::StdGlobalAlloc;
+use crate::mem_alloc::{CoreAlloc, TrMalloc};
 
 /// Smart pointers that can retrieve its memory allocator.
 pub trait TrBoxed
@@ -51,120 +50,120 @@ where
 }
 
 #[cfg(feature = "arc")]
-impl<T: ?Sized> TrBoxed for std::sync::Arc<T> {
-    type Malloc = StdGlobalAlloc;
+impl<T: ?Sized> TrBoxed for alloc::sync::Arc<T> {
+    type Malloc = CoreAlloc;
 
     #[inline]
     fn malloc(&self) -> &Self::Malloc {
-        StdGlobalAlloc::shared()
+        CoreAlloc::shared()
     }
 }
 
 #[cfg(feature = "arc")]
-impl<T: ?Sized> TrShared for std::sync::Arc<T> {
+impl<T: ?Sized> TrShared for alloc::sync::Arc<T> {
     type Item = T;
-    type Downgraded = std::sync::Weak<T>;
+    type Downgraded = alloc::sync::Weak<T>;
 
     #[inline]
     fn strong_count(&self) -> usize {
-        std::sync::Arc::strong_count(self)
+        alloc::sync::Arc::strong_count(self)
     }
 
     #[inline]
     fn weak_count(&self) -> usize {
-        std::sync::Arc::weak_count(self)
+        alloc::sync::Arc::weak_count(self)
     }
 
     #[inline]
     fn downgrade(&self) -> Self::Downgraded {
-        std::sync::Arc::downgrade(self)
+        alloc::sync::Arc::downgrade(self)
     }
 }
 
 #[cfg(feature = "arc")]
-impl<T: ?Sized> TrWeak for std::sync::Weak<T> {
+impl<T: ?Sized> TrWeak for alloc::sync::Weak<T> {
     type Item = T;
-    type Upgraded = std::sync::Arc<T>;
+    type Upgraded = alloc::sync::Arc<T>;
 
     #[inline]
     fn strong_count(&self) -> usize {
-        std::sync::Weak::strong_count(self)
+        alloc::sync::Weak::strong_count(self)
     }
 
     #[inline]
     fn weak_count(&self) -> usize {
-        std::sync::Weak::weak_count(self)
+        alloc::sync::Weak::weak_count(self)
     }
 
     #[inline]
     fn upgrade(&self) -> Option<Self::Upgraded> {
-        std::sync::Weak::upgrade(self)
+        alloc::sync::Weak::upgrade(self)
     }
 }
 
 #[cfg(feature = "rc")]
-impl<T: ?Sized> TrBoxed for std::rc::Rc<T> {
-    type Malloc = StdGlobalAlloc;
+impl<T: ?Sized> TrBoxed for alloc::rc::Rc<T> {
+    type Malloc = CoreAlloc;
 
     #[inline]
     fn malloc(&self) -> &Self::Malloc {
-        StdGlobalAlloc::shared()
+        CoreAlloc::shared()
     }
 }
 
 #[cfg(feature = "rc")]
-impl<T: ?Sized> TrShared for std::rc::Rc<T> {
+impl<T: ?Sized> TrShared for alloc::rc::Rc<T> {
     type Item = T;
-    type Downgraded = std::rc::Weak<T>;
+    type Downgraded = alloc::rc::Weak<T>;
 
     #[inline]
     fn strong_count(&self) -> usize {
-        std::rc::Rc::strong_count(self)
+        alloc::rc::Rc::strong_count(self)
     }
 
     #[inline]
     fn weak_count(&self) -> usize {
-        std::rc::Rc::weak_count(self)
+        alloc::rc::Rc::weak_count(self)
     }
 
     #[inline]
     fn downgrade(&self) -> Self::Downgraded {
-        std::rc::Rc::downgrade(self)
+        alloc::rc::Rc::downgrade(self)
     }
 }
 
 #[cfg(feature = "rc")]
-impl<T: ?Sized> TrWeak for std::rc::Weak<T> {
+impl<T: ?Sized> TrWeak for alloc::rc::Weak<T> {
     type Item = T;
-    type Upgraded = std::rc::Rc<T>;
+    type Upgraded = alloc::rc::Rc<T>;
 
     #[inline]
     fn strong_count(&self) -> usize {
-        std::rc::Weak::strong_count(self)
+        alloc::rc::Weak::strong_count(self)
     }
 
     #[inline]
     fn weak_count(&self) -> usize {
-        std::rc::Weak::weak_count(self)
+        alloc::rc::Weak::weak_count(self)
     }
 
     #[inline]
     fn upgrade(&self) -> Option<Self::Upgraded> {
-        std::rc::Weak::upgrade(self)
+        alloc::rc::Weak::upgrade(self)
     }
 }
 
 #[cfg(feature = "box")]
-impl<T: ?Sized> TrBoxed for std::boxed::Box<T> {
-    type Malloc = StdGlobalAlloc;
+impl<T: ?Sized> TrBoxed for alloc::boxed::Box<T> {
+    type Malloc = CoreAlloc;
 
     fn malloc(&self) -> &Self::Malloc {
-        StdGlobalAlloc::shared()
+        CoreAlloc::shared()
     }
 }
 
 #[cfg(feature = "box")]
-impl<T: ?Sized> TrUnique for std::boxed::Box<T> {
+impl<T: ?Sized> TrUnique for alloc::boxed::Box<T> {
     type Item = T;
 }
 
@@ -176,7 +175,7 @@ mod tests_ {
     #[cfg(feature = "arc")]
     #[test]
     fn arc_should_impl_shared() {
-        use std::sync::{Arc, Weak};
+        use alloc::sync::{Arc, Weak};
 
         let arc = Arc::new(());
         let weak = TrShared::downgrade(&arc);
@@ -191,7 +190,7 @@ mod tests_ {
     #[cfg(feature = "rc")]
     #[test]
     fn rc_should_impl_shared() {
-        use std::rc::{Rc, Weak};
+        use alloc::rc::{Rc, Weak};
 
         let rc = Rc::new(());
         let weak = TrShared::downgrade(&rc);
@@ -206,7 +205,7 @@ mod tests_ {
     #[cfg(feature = "box")]
     #[test]
     fn box_should_impl_unique() {
-        let p = std::boxed::Box::new(());
-        assert!(std::ptr::eq(p.malloc(), StdGlobalAlloc::shared()));
+        let p = alloc::boxed::Box::new(());
+        assert!(std::ptr::eq(p.malloc(), CoreAlloc::shared()));
     }
 }

@@ -99,12 +99,8 @@ unsafe impl TrMalloc for FakeMalloc {
     }
 
     #[inline(always)]
-    unsafe fn deallocate(
-        &self,
-        ptr: MemAddr,
-        layout: Layout,
-    ) -> Result<usize, FakeMallocError> {
-        FakeMalloc::deallocate(self, ptr, layout)
+    unsafe fn deallocate(&self, ptr: MemAddr, layout: Layout) -> Result<usize, FakeMallocError> {
+        unsafe { FakeMalloc::deallocate(self, ptr, layout) }
     }
 }
 
@@ -116,5 +112,5 @@ impl fmt::Display for FakeMallocError {
 
 impl error::Error for FakeMallocError {}
 
-#[cfg(feature = "global_alloc")]
-pub use crate::std_global_::{StdGlobalAlloc, StdGlobalAllocError};
+#[cfg(any(test, feature = "core_alloc"))]
+pub use crate::core_alloc_::{CoreAlloc, CoreAllocError};

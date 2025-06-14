@@ -1,7 +1,7 @@
 ﻿[package]
 name = "abs_mm"
-version = "0.1.1"
-edition = "2021"
+version = "0.1.2"
+edition = "2024"
 
 authors = ["lino <lino_snsalias@outlook.com>"]
 description = "Abstract Memory Management"
@@ -12,13 +12,12 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 
 [features]
-std_smart_pointers = ["arc", "box", "rc"]
-arc = ["std", "global_alloc"]
-box = ["std", "global_alloc"]
-rc = ["std", "global_alloc"]
-global_alloc = []
-std = []
-default = []
+core_alloc = []
+arc = ["core_alloc"]
+box = ["core_alloc"]
+rc = ["core_alloc"]
+smart_pointers = ["arc", "box", "rc"]
+default = ["smart_pointers"]
 
 [dev-dependencies]
 log = { version = "0.4.*" }
