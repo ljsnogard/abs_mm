@@ -12,16 +12,10 @@ use crate::mem_alloc::TrMalloc;
 
 type MemAddr = NonNull<[u8]>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum AllocErrorMessage {
+    #[default]Unknown,
     NullPtrReturned,
-    Unknown,
-}
-
-impl Default for AllocErrorMessage {
-    fn default() -> Self {
-        AllocErrorMessage::Unknown
-    }
 }
 
 impl fmt::Display for AllocErrorMessage {
