@@ -3,66 +3,13 @@ extern crate alloc;
 use alloc::alloc::{alloc, dealloc};
 
 use core::{
-    alloc::{Layout, LayoutError},
-    error, fmt,
+    alloc::Layout,
     ptr::{self, NonNull},
 };
 
-use crate::mem_alloc::TrMalloc;
+use crate::mem_alloc::{AllocError, DeallocError, TrMalloc};
 
 type MemAddr = NonNull<[u8]>;
-
-#[derive(Debug, Default, Clone, Copy)]
-pub enum AllocErrorMessage {
-    #[default]Unknown,
-    NullPtrReturned,
-}
-
-impl fmt::Display for AllocErrorMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let m = match self {
-            AllocErrorMessage::NullPtrReturned => "Allocator_Returns_Null_Ptr",
-            AllocErrorMessage::Unknown => "Allocator_Unknown_Err",
-        };
-        write!(f, "{m}")
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum CoreAllocError {
-    LayoutErr(LayoutError),
-    AllocErr(AllocErrorMessage),
-}
-
-impl CoreAllocError {
-    pub const fn from_alloc_err(msg: AllocErrorMessage) -> Self {
-        CoreAllocError::AllocErr(msg)
-    }
-
-    pub const fn from_layout_err(err: LayoutError) -> Self {
-        CoreAllocError::LayoutErr(err)
-    }
-}
-
-impl From<LayoutError> for CoreAllocError {
-    fn from(value: LayoutError) -> Self {
-        Self::from_layout_err(value)
-    }
-}
-
-impl From<AllocErrorMessage> for CoreAllocError {
-    fn from(value: AllocErrorMessage) -> Self {
-        Self::from_alloc_err(value)
-    }
-}
-
-impl fmt::Display for CoreAllocError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "alloc returns null pointer.")
-    }
-}
-
-impl error::Error for CoreAllocError {}
 
 /// A wrapper for `alloc::alloc` and `alloc::dealloc`
 #[derive(Debug, Default, Clone, Copy)]
@@ -83,10 +30,10 @@ impl CoreAlloc {
         true
     }
 
-    pub fn allocate(&self, layout: Layout) -> Result<MemAddr, CoreAllocError> {
+    pub fn allocate(&self, layout: Layout) -> Result<MemAddr, AllocError> {
         unsafe {
             let Option::Some(p) = NonNull::new(alloc(layout)) else {
-                return Result::Err(AllocErrorMessage::NullPtrReturned.into())
+                return Result::Err(AllocError::NullPtrReturned)
             };
             #[cfg(test)]
             log::trace!(
@@ -117,7 +64,7 @@ impl CoreAlloc {
         &self,
         ptr: MemAddr,
         layout: Layout,
-    ) -> Result<usize, CoreAllocError> {
+    ) -> Result<usize, DeallocError> {
         #[cfg(test)]
         log::trace!(
             "[CoreAlloc::deallocate]({:?}) len: {}, layout: ({}, {})",
@@ -132,15 +79,11 @@ impl CoreAlloc {
 }
 
 unsafe impl TrMalloc for CoreAlloc {
-    type Err = CoreAllocError;
+    type AllocErr = AllocError;
+    type DeallocErr = DeallocError;
 
     #[inline(always)]
-    fn can_support(&self, layout: Layout) -> bool {
-        CoreAlloc::can_support(self, layout)
-    }
-
-    #[inline(always)]
-    fn allocate(&self, layout: Layout) -> Result<MemAddr, Self::Err> {
+    fn allocate(&self, layout: Layout) -> Result<MemAddr, Self::AllocErr> {
         CoreAlloc::allocate(self, layout)
     }
 
@@ -149,7 +92,7 @@ unsafe impl TrMalloc for CoreAlloc {
         &self,
         ptr: MemAddr,
         layout: Layout,
-    ) -> Result<usize, Self::Err> {
+    ) -> Result<usize, Self::DeallocErr> {
         unsafe { CoreAlloc::deallocate(self, ptr, layout) }
     }
 }

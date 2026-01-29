@@ -1,6 +1,6 @@
 ﻿extern crate alloc;
 
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Try};
 
 use crate::mem_alloc::{CoreAlloc, TrMalloc};
 
@@ -34,11 +34,11 @@ pub trait TrWeak {
     type Item: ?Sized;
     type Upgraded: TrShared<Item = Self::Item>;
 
-    fn strong_count(&self) -> usize;
+    fn try_strong_count(&self) -> impl Try<Output = usize>;
 
     fn weak_count(&self) -> usize;
 
-    fn upgrade(&self) -> Option<Self::Upgraded>;
+    fn upgrade(&self) -> impl Try<Output = Self::Upgraded>;
 }
 
 /// A trait describing smart pointers with a unique owner.
@@ -86,8 +86,8 @@ impl<T: ?Sized> TrWeak for alloc::sync::Weak<T> {
     type Upgraded = alloc::sync::Arc<T>;
 
     #[inline]
-    fn strong_count(&self) -> usize {
-        alloc::sync::Weak::strong_count(self)
+    fn try_strong_count(&self) -> impl Try<Output = usize> {
+        Option::Some(alloc::sync::Weak::strong_count(self))
     }
 
     #[inline]
@@ -96,7 +96,7 @@ impl<T: ?Sized> TrWeak for alloc::sync::Weak<T> {
     }
 
     #[inline]
-    fn upgrade(&self) -> Option<Self::Upgraded> {
+    fn upgrade(&self) -> impl Try<Output = Self::Upgraded> {
         alloc::sync::Weak::upgrade(self)
     }
 }
@@ -138,8 +138,8 @@ impl<T: ?Sized> TrWeak for alloc::rc::Weak<T> {
     type Upgraded = alloc::rc::Rc<T>;
 
     #[inline]
-    fn strong_count(&self) -> usize {
-        alloc::rc::Weak::strong_count(self)
+    fn try_strong_count(&self) -> impl Try<Output = usize> {
+        Option::Some(alloc::rc::Weak::strong_count(self))
     }
 
     #[inline]
@@ -148,7 +148,7 @@ impl<T: ?Sized> TrWeak for alloc::rc::Weak<T> {
     }
 
     #[inline]
-    fn upgrade(&self) -> Option<Self::Upgraded> {
+    fn upgrade(&self) -> impl Try<Output = Self::Upgraded> {
         alloc::rc::Weak::upgrade(self)
     }
 }
@@ -169,6 +169,8 @@ impl<T: ?Sized> TrUnique for alloc::boxed::Box<T> {
 
 #[cfg(test)]
 mod tests_ {
+    use core::ops::ControlFlow;
+
     #[allow(unused_imports)]
     use super::*;
 
@@ -182,7 +184,9 @@ mod tests_ {
         assert_eq!(Arc::strong_count(&arc), TrShared::strong_count(&arc));
         assert_eq!(Weak::weak_count(&weak), TrWeak::weak_count(&weak));
 
-        let upgraded = TrWeak::upgrade(&weak).unwrap();
+        let ControlFlow::Continue(upgraded) = TrWeak::upgrade(&weak).branch() else {
+            panic!()
+        };
         assert_eq!(Arc::strong_count(&arc), upgraded.strong_count());
         assert_eq!(upgraded.strong_count(), 2);
     }
@@ -197,7 +201,9 @@ mod tests_ {
         assert_eq!(Rc::strong_count(&rc), TrShared::strong_count(&rc));
         assert_eq!(Weak::weak_count(&weak), TrWeak::weak_count(&weak));
 
-        let upgraded = TrWeak::upgrade(&weak).unwrap();
+        let ControlFlow::Continue(upgraded) = TrWeak::upgrade(&weak).branch() else {
+            panic!()
+        };
         assert_eq!(Rc::strong_count(&rc), upgraded.strong_count());
         assert_eq!(upgraded.strong_count(), 2);
     }

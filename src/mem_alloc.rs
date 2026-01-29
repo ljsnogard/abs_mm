@@ -1,5 +1,5 @@
 ﻿use core::{
-    alloc::Layout,
+    alloc::{Layout, LayoutError},
     error,
     fmt,
     ptr::NonNull,
@@ -7,11 +7,8 @@
 
 pub(crate) type MemAddr = NonNull<[u8]>;
 
-/// A trait used by pool for internal memory alloc and dealloc when Allocator
-/// trait is unstable.
-///
-/// The impl of this trait is usually a wrapper around the function pair of
-/// `alloc` and `dealloc`.
+/// A trait for general purpose allocator to acquire memory fitting the given
+/// layout.
 ///
 /// # Safety
 ///
@@ -25,26 +22,28 @@ pub(crate) type MemAddr = NonNull<[u8]>;
 ///
 /// * any pointer to a memory block which is currently allocated may be passed
 ///   to any other method of the allocator.
-pub unsafe trait TrMalloc {
-    type Err: error::Error;
-
-    fn can_support(&self, layout: Layout) -> bool;
+pub unsafe trait TrMalloc
+where
+    Self: fmt::Debug,
+{
+    type AllocErr: error::Error;
+    type DeallocErr: error::Error;
 
     fn allocate(
         &self,
         layout: Layout,
-    ) -> Result<MemAddr, Self::Err>;
+    ) -> Result<MemAddr, Self::AllocErr>;
 
     /// Deallocate memory pointed by the pointer
     ///
     /// # Safety
     ///
-    /// No content yet
+    /// The `ptr` must point to a valid address allocated by this allocator.
     unsafe fn deallocate(
         &self,
         ptr: MemAddr,
         layout: Layout,
-    ) -> Result<usize, Self::Err>;
+    ) -> Result<usize, Self::DeallocErr>;
 }
 
 /// A dummy allocator that will do nothing but only return error.
@@ -86,20 +85,20 @@ impl FakeMalloc {
 pub struct FakeMallocError;
 
 unsafe impl TrMalloc for FakeMalloc {
-    type Err = FakeMallocError;
+    type AllocErr = FakeMallocError;
+    type DeallocErr = FakeMallocError;
 
-    #[inline(always)]
-    fn can_support(&self, layout: Layout) -> bool {
-        FakeMalloc::can_support(self, layout)
-    }
-
-    #[inline(always)]
+    #[inline]
     fn allocate(&self, layout: Layout) -> Result<MemAddr, FakeMallocError> {
         FakeMalloc::allocate(self, layout)
     }
 
-    #[inline(always)]
-    unsafe fn deallocate(&self, ptr: MemAddr, layout: Layout) -> Result<usize, FakeMallocError> {
+    #[inline]
+    unsafe fn deallocate(
+        &self,
+        ptr: MemAddr,
+        layout: Layout,
+    ) -> Result<usize, FakeMallocError> {
         unsafe { FakeMalloc::deallocate(self, ptr, layout) }
     }
 }
@@ -112,5 +111,58 @@ impl fmt::Display for FakeMallocError {
 
 impl error::Error for FakeMallocError {}
 
+#[derive(Debug, Default, Clone)]
+pub enum AllocError {
+    UnsupportedLayout(Layout),
+    LayoutErr(LayoutError),
+    NullPtrReturned,
+    #[default]Unknown,
+}
+
+#[derive(Debug, Default, Clone)]
+pub enum DeallocError {
+    InvalidAddr(MemAddr),
+    #[default]Unknown,
+}
+
+
+impl fmt::Display for AllocError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedLayout(layout)
+                => write!(f, "AllocError::UnsupportedLayout({layout:?})"),
+            Self::LayoutErr(err)
+                => write!(f, "AllocError::LayoutErr({err:?})"),
+            Self::NullPtrReturned
+                => write!(f, "AllocError::NullPtrReturned"),
+            Self::Unknown
+                => write!(f, "AllocError::Unknown"),
+        }
+    }
+}
+
+impl error::Error for AllocError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        if let AllocError::LayoutErr(err) = self {
+            Option::Some(err)
+        } else {
+            Option::None
+        }
+    }
+}
+
+impl fmt::Display for DeallocError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidAddr(addr)
+                => write!(f, "DeallocError::InvalidAddr({addr:?})"),
+            Self::Unknown
+                => write!(f, "DeallocError::Unknown"),
+        }
+    }
+}
+
+impl error::Error for DeallocError {}
+
 #[cfg(any(test, feature = "core_alloc"))]
-pub use crate::core_alloc_::{CoreAlloc, CoreAllocError};
+pub use crate::core_alloc_::CoreAlloc;

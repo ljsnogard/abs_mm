@@ -1,6 +1,6 @@
 ﻿[package]
 name = "abs_mm"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 
 authors = ["lino <lino_snsalias@outlook.com>"]
