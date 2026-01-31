@@ -1,63 +1,14 @@
 ﻿use core::{
     alloc::{self, Layout},
+    borrow::Borrow,
     error,
     fmt,
+    marker::PhantomData,
     mem::MaybeUninit,
     ptr::{self, NonNull},
 };
 
-use crate::mem_alloc::TrMalloc;
-
-/// Functions that initialize dynamic sized data at a given address, as if it
-/// was constructed directly at place.
-/// 
-/// # Safety
-/// 
-/// see [TrEmplace::at] for detail.
-pub unsafe trait TrEmplace<T>
-where
-    T: ?Sized,
-{
-    /// Consumes self to initialize data at the address given by pointer to 
-    /// the uninit memory.
-    /// 
-    /// # Safety
-    /// 
-    /// * Memory pointed by the `uninit` argument should assumed uninitialized.
-    ///   Reading any data prior to the initialization will cause UB.
-    unsafe fn at(self, uninit: NonNull<T>);
-}
-
-pub trait TrEmplaceItems<T> {
-    fn at_index(
-        &mut self,
-        index: usize,
-        uninit: &mut MaybeUninit<T>,
-    );
-}
-
-unsafe impl<F, T> TrEmplace<T> for F
-where
-    F: FnOnce(NonNull<T>),
-    T: ?Sized,
-{
-    unsafe fn at(self, uninit: NonNull<T>) {
-        self(uninit)
-    }
-}
-
-impl<F, T> TrEmplaceItems<T> for F
-where
-    F: FnMut(usize, &mut MaybeUninit<T>),
-{
-    fn at_index(
-        &mut self,
-        index: usize,
-        uninit: &mut MaybeUninit<T>,
-    ) {
-        self(index, uninit)
-    }
-}
+use crate::mem_alloc::{AllocAddr, TrMalloc};
 
 /// Memory allocator for a concrete SIZED type.
 /// layout.
@@ -76,7 +27,6 @@ where
 ///   to any other method of the allocator.
 pub unsafe trait TrTypedAlloc<T>
 where
-    Self: fmt::Debug,
     T: ?Sized,
 {
     type AllocErr: error::Error;
@@ -85,16 +35,16 @@ where
     fn allocate<F>(&self, emplace: F) -> Result<NonNull<T>, Self::AllocErr>
     where
         T: Sized,
-        F: TrEmplace<T>;
+        F: FnOnce(&mut MaybeUninit<T>);
 
     fn allocate_slice<F>(
         &self,
         length: usize,
-        emplace_items: &mut F,
+        emplace_items: F,
     ) -> Result<NonNull<[T]>, Self::AllocErr>
     where
         T: Sized,
-        F: TrEmplaceItems<T>;
+        F: FnMut(usize, &mut MaybeUninit<T>);
 
     /// Deallocates the storage referenced by the `pointer`, which must be a 
     /// pointer obtained by an earlier call to allocate().
@@ -168,7 +118,7 @@ where
 
 impl<M> error::Error for TypedAllocError<M>
 where
-    M: TrMalloc,
+    M: TrMalloc + fmt::Debug,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -183,7 +133,7 @@ pub enum TypedDeallocError<M>
 where
     M: TrMalloc,
 {
-    AddressErr(NonNull<()>),
+    AddressErr(AllocAddr),
     MemDeallocErr(<M as TrMalloc>::DeallocErr),
 }
 
@@ -218,7 +168,7 @@ where
 
 impl<M> error::Error for TypedDeallocError<M>
 where
-    M: TrMalloc,
+    M: TrMalloc + fmt::Debug,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         if let Self::MemDeallocErr(e) = self {
@@ -229,10 +179,84 @@ where
     }
 }
 
-unsafe impl<M, T> TrTypedAlloc<T> for M
+/// A typed allocator by wrapping a `TrMalloc`.
+#[derive(Debug)]
+pub struct TypedAllocator<T, B, M>
 where
     T: ?Sized,
-    M: TrMalloc + Clone,
+    B: Borrow<M>,
+    M: TrMalloc,
+{
+    _unused_t_: PhantomData<T>,
+    _unused_m_: PhantomData<M>,
+    mem_alloc_: B,
+}
+
+impl<'a, T, M> TypedAllocator<T, &'a M, M>
+where
+    T: ?Sized,
+    M: TrMalloc,
+{
+    #[inline]
+    pub const fn new_by_borrowing(mem_alloc: &'a M) -> Self {
+        TypedAllocator::new(mem_alloc)
+    }
+}
+
+impl<T, M> TypedAllocator<T, M, M>
+where
+    T: ?Sized,
+    M: TrMalloc,
+{
+    #[inline]
+    pub const fn new_by_owning(mem_alloc: M) -> Self {
+        TypedAllocator::new(mem_alloc)
+    }
+
+    #[inline]
+    pub fn into_mem_alloc(self) -> M {
+        self.mem_alloc_
+    }
+}
+
+impl<T, B, M> TypedAllocator<T, B, M>
+where
+    T: ?Sized,
+    B: Borrow<M>,
+    M: TrMalloc,
+{
+    #[inline]
+    pub const fn new(mem_alloc: B) -> Self {
+        TypedAllocator {
+            _unused_t_: PhantomData,
+            _unused_m_: PhantomData,
+            mem_alloc_: mem_alloc,
+        }
+    }
+
+    #[inline]
+    pub fn mem_allocator(&self) -> &M {
+        self.mem_alloc_.borrow()
+    }
+}
+
+impl<T, B, M> AsRef<M> for TypedAllocator<T, B, M>
+where
+    T: ?Sized,
+    B: Borrow<M>,
+    M: TrMalloc,
+{
+    #[inline]
+    fn as_ref(&self) -> &M {
+        self.mem_allocator()
+    }
+}
+
+unsafe impl<T, B, M> TrTypedAlloc<T> for TypedAllocator<T, B, M>
+where
+    T: ?Sized,
+    B: Borrow<M>,
+    M: TrMalloc + fmt::Debug,
 {
     type AllocErr = TypedAllocError<M>;
     type DeallocErr = TypedDeallocError<M>;
@@ -240,16 +264,18 @@ where
     fn allocate<F>(&self, emplace: F) -> Result<NonNull<T>, Self::AllocErr>
     where
         T: Sized,
-        F: TrEmplace<T>,
+        F: FnOnce(&mut MaybeUninit<T>),
     {
         let ptr = self
+            .mem_alloc_
+            .borrow()
             .allocate(Layout::new::<T>())
             .map_err(|e| TypedAllocError::MemAllocErr(e))?;
         // This line requires unstable feature "slice_ptr_get"
         let data_ptr = ptr.as_non_null_ptr().as_ptr() as *mut T;
         let r = unsafe {
-            let p = NonNull::new_unchecked(data_ptr);
-            emplace.at(p);
+            let p = data_ptr as *mut MaybeUninit<T>;
+            emplace(p.as_mut_unchecked());
             NonNull::new_unchecked(data_ptr)
         };
         Result::Ok(r)
@@ -258,15 +284,17 @@ where
     fn allocate_slice<F>(
         &self,
         length: usize,
-        emplace_items: &mut F,
+        mut emplace_items: F,
     ) -> Result<NonNull<[T]>, Self::AllocErr>
     where
         T: Sized,
-        F: TrEmplaceItems<T>,
+        F: FnMut(usize, &mut MaybeUninit<T>),
     {
         let layout = Layout::array::<T>(length)
             .map_err(|e| TypedAllocError::LayoutErr(e))?;
         let ptr = self
+            .mem_alloc_
+            .borrow()
             .allocate(layout)
             .map_err(|e| TypedAllocError::MemAllocErr(e))?;
         let slice_ptr = {
@@ -277,7 +305,7 @@ where
             let uninit_slice_ptr = slice_ptr as *mut [MaybeUninit<T>];
             let uninit_slice = &mut *uninit_slice_ptr;
             for (index, item) in uninit_slice.iter_mut().enumerate() {
-                emplace_items.at_index(index, item)
+                emplace_items(index, item)
             }
             NonNull::new_unchecked(slice_ptr)
         };
@@ -292,14 +320,11 @@ where
         unsafe {
             let layout = Layout::for_value_raw(data);
             data.drop_in_place();
-            let ptr = ptr::slice_from_raw_parts_mut(
-                data as *mut u8,
-                layout.size(),
-            );
-            let ptr = NonNull::new_unchecked(ptr);
-            let addr = NonNull::new_unchecked(data as *mut u8 as *mut ());
-            self.deallocate(ptr, layout)
-                .map_err(|_| TypedDeallocError::AddressErr(addr))
+            let ptr = NonNull::new_unchecked(data as *mut u8);
+            self.mem_alloc_
+                .borrow()
+                .deallocate(ptr, layout)
+                .map_err(|e| TypedDeallocError::MemDeallocErr(e))
         }
     }
 
@@ -317,10 +342,10 @@ where
         };
         unsafe {
             let layout = Layout::for_value(slice);
-            let addr = slice.as_ptr() as *mut u8;
-            let ptr = ptr::slice_from_raw_parts_mut(addr, layout.size());
-            let ptr = NonNull::new_unchecked(ptr);
-            self.deallocate(ptr, layout)
+            let ptr = NonNull::new_unchecked(slice.as_ptr() as *mut u8);
+            self.mem_alloc_
+                .borrow()
+                .deallocate(ptr, layout)
                 .map_err(|e| TypedDeallocError::MemDeallocErr(e))
         }
     }
@@ -328,20 +353,49 @@ where
 
 #[cfg(test)]
 mod tests_ {
-    use core::{
-        alloc::Layout,
-        ptr::NonNull,
+    use core::mem::MaybeUninit;
+
+    use crate::{
+        core_alloc_::CoreAlloc,
+        typed_alloc::{TrTypedAlloc, TypedAllocator},
     };
 
-    use crate::mem_alloc::TrMalloc;
-
-    #[derive(Debug, Clone, Copy)]
-    enum TestMemAllocErr {
-        UnsupportedLayout(Layout),
-        IncapableAlloc(),
-        InvalidPointer(NonNull<[u8]>),
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+    struct TestData {
+        a: usize,
+        b: usize,
     }
 
-    #[derive(Debug, Default, Clone, Copy)]
-    struct TestMemAlloc {}
+    #[test]
+    fn typed_alloc_can_alloc_dealloc_fixed_size() {
+        let d = TestData { a: 0x12345678, b: 0x9abcdef0 };
+        let a = TypedAllocator::<TestData, _, _>::new_by_owning(CoreAlloc::new());
+        let r = a.allocate(|p| {
+            p.write(d);
+        });
+        let ptr: core::ptr::NonNull<TestData> = r.unwrap();
+        let pdata = unsafe { ptr.as_ref() };
+        assert_eq!(pdata, &d);
+
+        let r = unsafe { a.deallocate(ptr) };
+        assert!(r.is_ok())
+    }
+
+    #[test]
+    fn typed_alloc_can_alloc_dealloc_dyn_size() {
+        let a = TypedAllocator::<TestData, _, _>::new_by_owning(CoreAlloc::new());
+        let r = a.allocate_slice(16, |i: usize, p: &mut MaybeUninit<TestData>| {
+            p.write(TestData { a: usize::MAX - i, b: 1 << i });
+        });
+        let ptr = r.unwrap();
+        let slice = unsafe { ptr.as_ref() };
+
+        for (i, data) in slice.iter().enumerate() {
+            let sample = TestData { a: usize::MAX - i, b: 1 << i };
+            assert_eq!(data, &sample);
+        }
+
+        let r = unsafe { a.deallocate_slice(ptr) };
+        assert!(r.is_ok())
+    }
 }

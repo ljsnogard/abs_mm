@@ -7,34 +7,37 @@ use crate::mem_alloc::{CoreAlloc, TrMalloc};
 /// Smart pointers that can retrieve its memory allocator.
 pub trait TrBoxed
 where
-    Self: Sized + Deref,
+    Self: Deref<Target = Self::Item>,
 {
+    type Item: ?Sized;
     type Malloc: TrMalloc;
 
-    fn malloc(&self) -> &Self::Malloc;
+    fn try_get_mem_alloc(&self) -> impl Try<Output = Self::Malloc>;
 }
 
 /// A trait describing smart pointers that share the ownership of the resource
 /// with reference counting.
-pub trait TrShared
+pub trait TrStrongShared
 where
     Self: TrBoxed + Clone,
 {
-    type Item: ?Sized;
-    type Downgraded: TrWeak<Item = Self::Item>;
+    type Downgraded: TrWeakShared<Item = Self::Item>;
 
     fn strong_count(&self) -> usize;
 
-    fn weak_count(&self) -> usize;
+    fn try_get_weak_count(&self) -> impl Try<Output = usize>;
 
     fn downgrade(&self) -> Self::Downgraded;
 }
 
-pub trait TrWeak {
+pub trait TrWeakShared
+where
+    Self: Clone,
+{
     type Item: ?Sized;
-    type Upgraded: TrShared<Item = Self::Item>;
+    type Upgraded: TrStrongShared<Item = Self::Item>;
 
-    fn try_strong_count(&self) -> impl Try<Output = usize>;
+    fn try_get_strong_count(&self) -> impl Try<Output = usize>;
 
     fn weak_count(&self) -> usize;
 
@@ -44,24 +47,22 @@ pub trait TrWeak {
 /// A trait describing smart pointers with a unique owner.
 pub trait TrUnique
 where
-    Self: TrBoxed + DerefMut,
-{
-    type Item: ?Sized;
-}
+    Self: TrBoxed + DerefMut<Target = Self::Item>,
+{}
 
 #[cfg(feature = "arc")]
 impl<T: ?Sized> TrBoxed for alloc::sync::Arc<T> {
+    type Item = T;
     type Malloc = CoreAlloc;
 
     #[inline]
-    fn malloc(&self) -> &Self::Malloc {
-        CoreAlloc::shared()
+    fn try_get_mem_alloc(&self) -> impl Try<Output = Self::Malloc> {
+        Option::Some(CoreAlloc::new())
     }
 }
 
 #[cfg(feature = "arc")]
-impl<T: ?Sized> TrShared for alloc::sync::Arc<T> {
-    type Item = T;
+impl<T: ?Sized> TrStrongShared for alloc::sync::Arc<T> {
     type Downgraded = alloc::sync::Weak<T>;
 
     #[inline]
@@ -70,8 +71,8 @@ impl<T: ?Sized> TrShared for alloc::sync::Arc<T> {
     }
 
     #[inline]
-    fn weak_count(&self) -> usize {
-        alloc::sync::Arc::weak_count(self)
+    fn try_get_weak_count(&self) -> impl Try<Output = usize> {
+        Option::Some(alloc::sync::Arc::weak_count(self))
     }
 
     #[inline]
@@ -81,12 +82,12 @@ impl<T: ?Sized> TrShared for alloc::sync::Arc<T> {
 }
 
 #[cfg(feature = "arc")]
-impl<T: ?Sized> TrWeak for alloc::sync::Weak<T> {
-    type Item = T;
+impl<T: ?Sized> TrWeakShared for alloc::sync::Weak<T> {
     type Upgraded = alloc::sync::Arc<T>;
+    type Item = T;
 
     #[inline]
-    fn try_strong_count(&self) -> impl Try<Output = usize> {
+    fn try_get_strong_count(&self) -> impl Try<Output = usize> {
         Option::Some(alloc::sync::Weak::strong_count(self))
     }
 
@@ -103,17 +104,17 @@ impl<T: ?Sized> TrWeak for alloc::sync::Weak<T> {
 
 #[cfg(feature = "rc")]
 impl<T: ?Sized> TrBoxed for alloc::rc::Rc<T> {
+    type Item = T;
     type Malloc = CoreAlloc;
 
     #[inline]
-    fn malloc(&self) -> &Self::Malloc {
-        CoreAlloc::shared()
+    fn try_get_mem_alloc(&self) -> impl Try<Output = Self::Malloc> {
+        Option::Some(CoreAlloc::new())
     }
 }
 
 #[cfg(feature = "rc")]
-impl<T: ?Sized> TrShared for alloc::rc::Rc<T> {
-    type Item = T;
+impl<T: ?Sized> TrStrongShared for alloc::rc::Rc<T> {
     type Downgraded = alloc::rc::Weak<T>;
 
     #[inline]
@@ -122,8 +123,8 @@ impl<T: ?Sized> TrShared for alloc::rc::Rc<T> {
     }
 
     #[inline]
-    fn weak_count(&self) -> usize {
-        alloc::rc::Rc::weak_count(self)
+    fn try_get_weak_count(&self) -> impl Try<Output = usize> {
+        Option::Some(alloc::rc::Rc::weak_count(self))
     }
 
     #[inline]
@@ -133,12 +134,12 @@ impl<T: ?Sized> TrShared for alloc::rc::Rc<T> {
 }
 
 #[cfg(feature = "rc")]
-impl<T: ?Sized> TrWeak for alloc::rc::Weak<T> {
+impl<T: ?Sized> TrWeakShared for alloc::rc::Weak<T> {
     type Item = T;
     type Upgraded = alloc::rc::Rc<T>;
 
     #[inline]
-    fn try_strong_count(&self) -> impl Try<Output = usize> {
+    fn try_get_strong_count(&self) -> impl Try<Output = usize> {
         Option::Some(alloc::rc::Weak::strong_count(self))
     }
 
@@ -155,17 +156,17 @@ impl<T: ?Sized> TrWeak for alloc::rc::Weak<T> {
 
 #[cfg(feature = "box")]
 impl<T: ?Sized> TrBoxed for alloc::boxed::Box<T> {
+    type Item = T;
     type Malloc = CoreAlloc;
 
-    fn malloc(&self) -> &Self::Malloc {
-        CoreAlloc::shared()
+    fn try_get_mem_alloc(&self) -> impl Try<Output = Self::Malloc> {
+        Option::Some(CoreAlloc::new())
     }
 }
 
 #[cfg(feature = "box")]
-impl<T: ?Sized> TrUnique for alloc::boxed::Box<T> {
-    type Item = T;
-}
+impl<T: ?Sized> TrUnique for alloc::boxed::Box<T>
+{}
 
 #[cfg(test)]
 mod tests_ {
@@ -180,11 +181,11 @@ mod tests_ {
         use alloc::sync::{Arc, Weak};
 
         let arc = Arc::new(());
-        let weak = TrShared::downgrade(&arc);
-        assert_eq!(Arc::strong_count(&arc), TrShared::strong_count(&arc));
-        assert_eq!(Weak::weak_count(&weak), TrWeak::weak_count(&weak));
+        let weak = TrStrongShared::downgrade(&arc);
+        assert_eq!(Arc::strong_count(&arc), TrStrongShared::strong_count(&arc));
+        assert_eq!(Weak::weak_count(&weak), TrWeakShared::weak_count(&weak));
 
-        let ControlFlow::Continue(upgraded) = TrWeak::upgrade(&weak).branch() else {
+        let ControlFlow::Continue(upgraded) = TrWeakShared::upgrade(&weak).branch() else {
             panic!()
         };
         assert_eq!(Arc::strong_count(&arc), upgraded.strong_count());
@@ -197,21 +198,14 @@ mod tests_ {
         use alloc::rc::{Rc, Weak};
 
         let rc = Rc::new(());
-        let weak = TrShared::downgrade(&rc);
-        assert_eq!(Rc::strong_count(&rc), TrShared::strong_count(&rc));
-        assert_eq!(Weak::weak_count(&weak), TrWeak::weak_count(&weak));
+        let weak = TrStrongShared::downgrade(&rc);
+        assert_eq!(Rc::strong_count(&rc), TrStrongShared::strong_count(&rc));
+        assert_eq!(Weak::weak_count(&weak), TrWeakShared::weak_count(&weak));
 
-        let ControlFlow::Continue(upgraded) = TrWeak::upgrade(&weak).branch() else {
+        let ControlFlow::Continue(upgraded) = TrWeakShared::upgrade(&weak).branch() else {
             panic!()
         };
         assert_eq!(Rc::strong_count(&rc), upgraded.strong_count());
         assert_eq!(upgraded.strong_count(), 2);
-    }
-
-    #[cfg(feature = "box")]
-    #[test]
-    fn box_should_impl_unique() {
-        let p = alloc::boxed::Box::new(());
-        assert!(std::ptr::eq(p.malloc(), CoreAlloc::shared()));
     }
 }

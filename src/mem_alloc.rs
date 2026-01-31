@@ -5,7 +5,7 @@
     ptr::NonNull,
 };
 
-pub(crate) type MemAddr = NonNull<[u8]>;
+pub(crate) type AllocAddr = NonNull<[u8]>;
 
 /// A trait for general purpose allocator to acquire memory fitting the given
 /// layout.
@@ -22,17 +22,14 @@ pub(crate) type MemAddr = NonNull<[u8]>;
 ///
 /// * any pointer to a memory block which is currently allocated may be passed
 ///   to any other method of the allocator.
-pub unsafe trait TrMalloc
-where
-    Self: fmt::Debug,
-{
+pub unsafe trait TrMalloc {
     type AllocErr: error::Error;
     type DeallocErr: error::Error;
 
     fn allocate(
         &self,
         layout: Layout,
-    ) -> Result<MemAddr, Self::AllocErr>;
+    ) -> Result<AllocAddr, Self::AllocErr>;
 
     /// Deallocate memory pointed by the pointer
     ///
@@ -41,7 +38,7 @@ where
     /// The `ptr` must point to a valid address allocated by this allocator.
     unsafe fn deallocate(
         &self,
-        ptr: MemAddr,
+        ptr: NonNull<u8>,
         layout: Layout,
     ) -> Result<usize, Self::DeallocErr>;
 }
@@ -62,7 +59,7 @@ impl FakeMalloc {
     }
 
     /// It will always return `Err`
-    pub fn allocate(&self, _: Layout) -> Result<MemAddr, FakeMallocError> {
+    pub fn allocate(&self, _: Layout) -> Result<AllocAddr, FakeMallocError> {
         Result::Err(FakeMallocError)
     }
 
@@ -73,7 +70,7 @@ impl FakeMalloc {
     /// - This is not designed to be called manually.
     pub unsafe fn deallocate(
         &self,
-        _: MemAddr,
+        _: NonNull<u8>,
         _: Layout,
     ) -> Result<usize, FakeMallocError> {
         Result::Ok(0usize)
@@ -89,14 +86,14 @@ unsafe impl TrMalloc for FakeMalloc {
     type DeallocErr = FakeMallocError;
 
     #[inline]
-    fn allocate(&self, layout: Layout) -> Result<MemAddr, FakeMallocError> {
+    fn allocate(&self, layout: Layout) -> Result<AllocAddr, FakeMallocError> {
         FakeMalloc::allocate(self, layout)
     }
 
     #[inline]
     unsafe fn deallocate(
         &self,
-        ptr: MemAddr,
+        ptr: NonNull<u8>,
         layout: Layout,
     ) -> Result<usize, FakeMallocError> {
         unsafe { FakeMalloc::deallocate(self, ptr, layout) }
@@ -121,7 +118,7 @@ pub enum AllocError {
 
 #[derive(Debug, Default, Clone)]
 pub enum DeallocError {
-    InvalidAddr(MemAddr),
+    InvalidAddr(AllocAddr),
     #[default]Unknown,
 }
 
@@ -165,4 +162,4 @@ impl fmt::Display for DeallocError {
 impl error::Error for DeallocError {}
 
 #[cfg(any(test, feature = "core_alloc"))]
-pub use crate::core_alloc_::CoreAlloc;
+pub use crate::core_alloc_::{CoreAlloc, MemAllocator};

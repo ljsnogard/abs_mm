@@ -7,9 +7,7 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use crate::mem_alloc::{AllocError, DeallocError, TrMalloc};
-
-type MemAddr = NonNull<[u8]>;
+use crate::mem_alloc::{AllocAddr, AllocError, DeallocError, TrMalloc};
 
 /// A wrapper for `alloc::alloc` and `alloc::dealloc`
 #[derive(Debug, Default, Clone, Copy)]
@@ -30,7 +28,7 @@ impl CoreAlloc {
         true
     }
 
-    pub fn allocate(&self, layout: Layout) -> Result<MemAddr, AllocError> {
+    pub fn allocate(&self, layout: Layout) -> Result<AllocAddr, AllocError> {
         unsafe {
             let Option::Some(p) = NonNull::new(alloc(layout)) else {
                 return Result::Err(AllocError::NullPtrReturned)
@@ -62,18 +60,17 @@ impl CoreAlloc {
     /// [*fit*]: #memory-fitting
     pub unsafe fn deallocate(
         &self,
-        ptr: MemAddr,
+        ptr: NonNull<u8>,
         layout: Layout,
     ) -> Result<usize, DeallocError> {
         #[cfg(test)]
         log::trace!(
-            "[CoreAlloc::deallocate]({:?}) len: {}, layout: ({}, {})",
+            "[CoreAlloc::deallocate]({:?}), layout: ({}, {})",
             ptr.as_ptr(),
-            unsafe { ptr.as_ref().len() },
             layout.size(),
             layout.align()
         );
-        unsafe { dealloc(ptr.as_ptr() as *mut _, layout); }
+        unsafe { dealloc(ptr.as_ptr(), layout); }
         Result::Ok(layout.size())
     }
 }
@@ -83,16 +80,80 @@ unsafe impl TrMalloc for CoreAlloc {
     type DeallocErr = DeallocError;
 
     #[inline(always)]
-    fn allocate(&self, layout: Layout) -> Result<MemAddr, Self::AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<AllocAddr, Self::AllocErr> {
         CoreAlloc::allocate(self, layout)
     }
 
     #[inline(always)]
     unsafe fn deallocate(
         &self,
-        ptr: MemAddr,
+        ptr: NonNull<u8>,
         layout: Layout,
     ) -> Result<usize, Self::DeallocErr> {
         unsafe { CoreAlloc::deallocate(self, ptr, layout) }
+    }
+}
+
+#[derive(Debug)]
+pub struct MemAllocator<A>(A)
+where
+    A: core::alloc::Allocator;
+
+impl<A> MemAllocator<A>
+where
+    A: core::alloc::Allocator,
+{
+    pub const fn new(allocator: A) -> Self {
+        MemAllocator(allocator)
+    }
+
+    pub fn allocate(
+        &self,
+        layout: Layout,
+    ) -> Result<crate::mem_alloc::AllocAddr, core::alloc::AllocError> {
+        self.0.allocate(layout)
+    }
+
+    /// Deallocates the memory referenced by `ptr`.
+    ///
+    /// # Safety
+    ///
+    /// * `ptr` must denote a block of memory [*currently allocated*] via this allocator, and
+    /// * `layout` must [*fit*] that block of memory.
+    ///
+    /// [*currently allocated*]: #currently-allocated-memory
+    /// [*fit*]: #memory-fitting
+    pub unsafe fn deallocate(
+        &self,
+        addr: NonNull<u8>,
+        layout: Layout,
+    ) -> Result<usize, core::alloc::AllocError> {
+        unsafe { self.0.deallocate(addr, layout) };
+        Result::Ok(layout.size())
+    }
+}
+
+unsafe impl<A> TrMalloc for MemAllocator<A>
+where
+    A: core::alloc::Allocator,
+{
+    type AllocErr = core::alloc::AllocError;
+    type DeallocErr = core::alloc::AllocError;
+
+    #[inline]
+    fn allocate(
+        &self,
+        layout: Layout,
+    ) -> Result<crate::mem_alloc::AllocAddr, Self::AllocErr> {
+        MemAllocator::allocate(self, layout)
+    }
+
+    #[inline]
+    unsafe fn deallocate(
+        &self,
+        ptr: NonNull<u8>,
+        layout: Layout,
+    ) -> Result<usize, Self::DeallocErr> {
+        unsafe { MemAllocator::deallocate(self, ptr, layout) }
     }
 }
