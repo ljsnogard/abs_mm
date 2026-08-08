@@ -23,11 +23,6 @@ impl CoreAlloc {
         CoreAlloc
     }
 
-    pub fn can_support(&self, layout: Layout) -> bool {
-        let _ = layout;
-        true
-    }
-
     pub fn allocate(&self, layout: Layout) -> Result<AllocAddr, AllocError> {
         unsafe {
             let Option::Some(p) = NonNull::new(alloc(layout)) else {
@@ -52,7 +47,7 @@ impl CoreAlloc {
     ///
     /// # Safety
     ///
-    /// * `ptr` must denote a block of memory [*currently allocated*] via this 
+    /// * `ptr` must denote a block of memory [*currently allocated*] via this
     ///   allocator, and
     /// * `layout` must [*fit*] that block of memory.
     ///
