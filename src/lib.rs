@@ -1,7 +1,8 @@
 ﻿#![no_std]
 
 #![feature(allocator_api)]
-#![feature(layout_for_ptr)]
+// the feature `layout_for_ptr` has been stable since 1.99.0 and no longer requires an attribute to enable
+// #![feature(layout_for_ptr)]
 // #![feature(ptr_as_uninit)]
 // #![feature(ptr_as_ref_unchecked)]
 #![feature(slice_ptr_get)]

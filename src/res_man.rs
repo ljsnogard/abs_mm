@@ -69,7 +69,7 @@ where
 impl<T, A> TrStrongShared for alloc::sync::Arc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: core::alloc::AllocatorClone,
 {
     type Downgraded = alloc::sync::Weak<T, A>;
 
@@ -93,7 +93,7 @@ where
 impl<T, A> TrWeakShared for alloc::sync::Weak<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: core::alloc::AllocatorClone,
 {
     type Upgraded = alloc::sync::Arc<T, A>;
     type Item = T;
@@ -133,7 +133,7 @@ where
 impl<T, A> TrStrongShared for alloc::rc::Rc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: core::alloc::AllocatorClone,
 {
     type Downgraded = alloc::rc::Weak<T, A>;
 
@@ -157,7 +157,7 @@ where
 impl<T, A> TrWeakShared for alloc::rc::Weak<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: core::alloc::AllocatorClone,
 {
     type Item = T;
     type Upgraded = alloc::rc::Rc<T, A>;

@@ -1,3 +1,4 @@
+#[cfg(any(test, feature = "core_alloc"))]
 extern crate alloc;
 
 use alloc::alloc::{alloc, dealloc};
@@ -89,14 +90,14 @@ unsafe impl TrMalloc for CoreAlloc {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct MemAllocator<A>(A)
 where
-    A: core::alloc::Allocator;
+    A: core::alloc::AllocatorClone;
 
 impl<A> MemAllocator<A>
 where
-    A: core::alloc::Allocator,
+    A: core::alloc::AllocatorClone,
 {
     pub const fn new(allocator: A) -> Self {
         MemAllocator(allocator)
@@ -130,7 +131,7 @@ where
 
 unsafe impl<A> TrMalloc for MemAllocator<A>
 where
-    A: core::alloc::Allocator,
+    A: core::alloc::AllocatorClone,
 {
     type AllocErr = core::alloc::AllocError;
     type DeallocErr = core::alloc::AllocError;
