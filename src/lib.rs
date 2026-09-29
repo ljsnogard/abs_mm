@@ -1,10 +1,10 @@
 ﻿#![no_std]
 
 #![feature(allocator_api)]
-#![feature(layout_for_ptr)]
+// #![feature(layout_for_ptr)]  // this has been stable
 // #![feature(ptr_as_uninit)]
 // #![feature(ptr_as_ref_unchecked)]
-#![feature(slice_ptr_get)]
+// #![feature(slice_ptr_get)]
 #![feature(try_trait_v2)]
 
 // We always pull in `std` during tests, because it's just easier
@@ -15,6 +15,7 @@ extern crate std;
 #[cfg(any(test, feature = "core_alloc"))]
 mod core_alloc_;
 
-pub mod mem_alloc;
 pub mod res_man;
-pub mod typed_alloc;
+
+#[cfg(any(test, feature = "core_alloc"))]
+pub use core_alloc_::CoreAlloc;

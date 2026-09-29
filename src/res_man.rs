@@ -1,8 +1,9 @@
 ﻿extern crate alloc;
 
-use core::ops::{Deref, DerefMut, Try};
-
-use crate::mem_alloc::{CoreAlloc, TrMalloc};
+use core::{
+    alloc::{Allocator, AllocatorClone},
+    ops::{Deref, DerefMut, Try},
+};
 
 /// Smart pointers that can retrieve its memory allocator.
 pub trait TrBoxed
@@ -10,9 +11,9 @@ where
     Self: Deref<Target = Self::Item>,
 {
     type Item: ?Sized;
-    type Malloc: TrMalloc;
+    type Alloc: Allocator;
 
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Malloc>;
+    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc>;
 }
 
 /// A trait describing smart pointers that share the ownership of the resource
@@ -54,14 +55,14 @@ where
 impl<T, A> TrBoxed for alloc::sync::Arc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator,
+    A: AllocatorClone,
 {
     type Item = T;
-    type Malloc = CoreAlloc;
+    type Alloc = A;
 
     #[inline]
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Malloc> {
-        Option::Some(CoreAlloc::shared())
+    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
+        Option::Some(alloc::sync::Arc::<T, A>::allocator(self))
     }
 }
 
@@ -69,7 +70,7 @@ where
 impl<T, A> TrStrongShared for alloc::sync::Arc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: AllocatorClone,
 {
     type Downgraded = alloc::sync::Weak<T, A>;
 
@@ -93,7 +94,7 @@ where
 impl<T, A> TrWeakShared for alloc::sync::Weak<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: AllocatorClone,
 {
     type Upgraded = alloc::sync::Arc<T, A>;
     type Item = T;
@@ -118,14 +119,14 @@ where
 impl<T, A> TrBoxed for alloc::rc::Rc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator,
+    A: AllocatorClone,
 {
     type Item = T;
-    type Malloc = CoreAlloc;
+    type Alloc = A;
 
     #[inline]
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Malloc> {
-        Option::Some(CoreAlloc::shared())
+    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
+        Option::Some(alloc::rc::Rc::allocator(self))
     }
 }
 
@@ -133,7 +134,7 @@ where
 impl<T, A> TrStrongShared for alloc::rc::Rc<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: AllocatorClone,
 {
     type Downgraded = alloc::rc::Weak<T, A>;
 
@@ -157,7 +158,7 @@ where
 impl<T, A> TrWeakShared for alloc::rc::Weak<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator + Clone,
+    A: AllocatorClone,
 {
     type Item = T;
     type Upgraded = alloc::rc::Rc<T, A>;
@@ -182,13 +183,13 @@ where
 impl<T, A> TrBoxed for alloc::boxed::Box<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator,
+    A: Allocator,
 {
     type Item = T;
-    type Malloc = CoreAlloc;
+    type Alloc = A;
 
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Malloc> {
-        Option::Some(CoreAlloc::shared())
+    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
+        Option::Some(alloc::boxed::Box::<T, A>::allocator(self))
     }
 }
 
@@ -196,7 +197,7 @@ where
 impl<T, A> TrUnique for alloc::boxed::Box<T, A>
 where
     T: ?Sized,
-    A: core::alloc::Allocator,
+    A: Allocator,
 {}
 
 #[cfg(test)]

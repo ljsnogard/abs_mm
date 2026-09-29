@@ -3,30 +3,24 @@ extern crate alloc;
 use alloc::alloc::{alloc, dealloc};
 
 use core::{
-    alloc::Layout,
+    alloc::{Allocator, AllocatorClone, AllocError, Layout},
     ptr::{self, NonNull},
 };
 
-use crate::mem_alloc::{AllocAddr, AllocError, DeallocError, TrMalloc};
 
 /// A wrapper for `alloc::alloc` and `alloc::dealloc`
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CoreAlloc;
 
 impl CoreAlloc {
-    pub fn shared() -> &'static Self {
-        static CORE_ALLOC: CoreAlloc = CoreAlloc;
-        &CORE_ALLOC
-    }
-
     pub const fn new() -> Self {
         CoreAlloc
     }
 
-    pub fn allocate(&self, layout: Layout) -> Result<AllocAddr, AllocError> {
+    pub fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         unsafe {
             let Option::Some(p) = NonNull::new(alloc(layout)) else {
-                return Result::Err(AllocError::NullPtrReturned)
+                return Result::Err(AllocError);
             };
             #[cfg(test)]
             log::trace!(
@@ -53,11 +47,7 @@ impl CoreAlloc {
     ///
     /// [*currently allocated*]: #currently-allocated-memory
     /// [*fit*]: #memory-fitting
-    pub unsafe fn deallocate(
-        &self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<usize, DeallocError> {
+    pub unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         #[cfg(test)]
         log::trace!(
             "[CoreAlloc::deallocate]({:?}), layout: ({}, {})",
@@ -65,90 +55,20 @@ impl CoreAlloc {
             layout.size(),
             layout.align()
         );
-        unsafe { dealloc(ptr.as_ptr(), layout); }
-        Result::Ok(layout.size())
+        unsafe { dealloc(ptr.as_ptr(), layout) };
     }
 }
 
-unsafe impl TrMalloc for CoreAlloc {
-    type AllocErr = AllocError;
-    type DeallocErr = DeallocError;
-
+unsafe impl Allocator for CoreAlloc {
     #[inline(always)]
-    fn allocate(&self, layout: Layout) -> Result<AllocAddr, Self::AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         CoreAlloc::allocate(self, layout)
     }
 
     #[inline(always)]
-    unsafe fn deallocate(
-        &self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<usize, Self::DeallocErr> {
-        unsafe { CoreAlloc::deallocate(self, ptr, layout) }
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        unsafe { CoreAlloc::deallocate(self, ptr, layout) };
     }
 }
 
-#[derive(Debug)]
-pub struct MemAllocator<A>(A)
-where
-    A: core::alloc::Allocator;
-
-impl<A> MemAllocator<A>
-where
-    A: core::alloc::Allocator,
-{
-    pub const fn new(allocator: A) -> Self {
-        MemAllocator(allocator)
-    }
-
-    pub fn allocate(
-        &self,
-        layout: Layout,
-    ) -> Result<crate::mem_alloc::AllocAddr, core::alloc::AllocError> {
-        self.0.allocate(layout)
-    }
-
-    /// Deallocates the memory referenced by `ptr`.
-    ///
-    /// # Safety
-    ///
-    /// * `ptr` must denote a block of memory [*currently allocated*] via this allocator, and
-    /// * `layout` must [*fit*] that block of memory.
-    ///
-    /// [*currently allocated*]: #currently-allocated-memory
-    /// [*fit*]: #memory-fitting
-    pub unsafe fn deallocate(
-        &self,
-        addr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<usize, core::alloc::AllocError> {
-        unsafe { self.0.deallocate(addr, layout) };
-        Result::Ok(layout.size())
-    }
-}
-
-unsafe impl<A> TrMalloc for MemAllocator<A>
-where
-    A: core::alloc::Allocator,
-{
-    type AllocErr = core::alloc::AllocError;
-    type DeallocErr = core::alloc::AllocError;
-
-    #[inline]
-    fn allocate(
-        &self,
-        layout: Layout,
-    ) -> Result<crate::mem_alloc::AllocAddr, Self::AllocErr> {
-        MemAllocator::allocate(self, layout)
-    }
-
-    #[inline]
-    unsafe fn deallocate(
-        &self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<usize, Self::DeallocErr> {
-        unsafe { MemAllocator::deallocate(self, ptr, layout) }
-    }
-}
+unsafe impl AllocatorClone for CoreAlloc {}
