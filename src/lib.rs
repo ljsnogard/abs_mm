@@ -1,6 +1,6 @@
 ﻿#![no_std]
 
-#![feature(allocator_api)]
+#![feature(allocator_ext)]
 // #![feature(layout_for_ptr)]  // this has been stable
 // #![feature(ptr_as_uninit)]
 // #![feature(ptr_as_ref_unchecked)]
