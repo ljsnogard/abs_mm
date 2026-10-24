@@ -8,7 +8,7 @@ description = "Abstract Memory Management"
 repository = "https://github.com/ljsnogard/abs_mm"
 keywords = ["traits", "smart-pointer"]
 categories = ["no-std", "memory-management"]
-license = "MIT/Apache-2.0"
+license = "AGPL-3.0-or-later"
 readme = "README.md"
 
 [features]
