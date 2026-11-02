@@ -5,7 +5,14 @@ use core::{
     ops::{Deref, DerefMut, Try},
 };
 
-/// Smart pointers that can retrieve its memory allocator.
+/// Types that can provide its internal allocator.
+pub trait TrAllocBy {
+    type Alloc: Allocator;
+
+    fn mem_alloc(&self) -> &Self::Alloc;
+}
+
+/// Smart pointers that hold values on the heap
 pub trait TrBoxed
 where
     Self: Deref<Target = Self::Item>,
@@ -47,6 +54,23 @@ pub trait TrUnique
 where
     Self: TrBoxed + DerefMut<Target = Self::Item>,
 {}
+
+//==============================================================================
+// Arc<T, A>
+//==============================================================================
+
+#[cfg(feature = "arc")]
+impl<T, A> TrAllocBy for alloc::sync::Arc<T, A>
+where
+    T: ?Sized,
+    A: AllocatorClone,
+{
+    type Alloc = A;
+
+    fn mem_alloc(&self) -> &Self::Alloc {
+        alloc::sync::Arc::<T, A>::allocator(self)
+    }
+}
 
 #[cfg(feature = "arc")]
 impl<T, A> TrBoxed for alloc::sync::Arc<T, A>
@@ -106,6 +130,23 @@ where
     }
 }
 
+//==============================================================================
+// Rc<T, A>
+//==============================================================================
+
+#[cfg(feature = "rc")]
+impl<T, A> TrAllocBy for alloc::rc::Rc<T, A>
+where
+    T: ?Sized,
+    A: AllocatorClone,
+{
+    type Alloc = A;
+
+    fn mem_alloc(&self) -> &Self::Alloc {
+        alloc::rc::Rc::<T, A>::allocator(self)
+    }
+}
+
 #[cfg(feature = "rc")]
 impl<T, A> TrBoxed for alloc::rc::Rc<T, A>
 where
@@ -161,6 +202,23 @@ where
     #[inline]
     fn try_upgrade(&self) -> impl Try<Output = Self::Upgraded> {
         alloc::rc::Weak::upgrade(self)
+    }
+}
+
+//==============================================================================
+// Box<T, A>
+//==============================================================================
+
+#[cfg(feature = "box")]
+impl<T, A> TrAllocBy for alloc::boxed::Box<T, A>
+where
+    T: ?Sized,
+    A: Allocator,
+{
+    type Alloc = A;
+
+    fn mem_alloc(&self) -> &Self::Alloc {
+        alloc::boxed::Box::<T, A>::allocator(self)
     }
 }
 
