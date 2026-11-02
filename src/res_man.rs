@@ -11,9 +11,6 @@ where
     Self: Deref<Target = Self::Item>,
 {
     type Item: ?Sized;
-    type Alloc: Allocator;
-
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc>;
 }
 
 /// A trait describing smart pointers that share the ownership of the resource
@@ -58,12 +55,6 @@ where
     A: AllocatorClone,
 {
     type Item = T;
-    type Alloc = A;
-
-    #[inline]
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
-        Option::Some(alloc::sync::Arc::<T, A>::allocator(self))
-    }
 }
 
 #[cfg(feature = "arc")]
@@ -122,12 +113,6 @@ where
     A: AllocatorClone,
 {
     type Item = T;
-    type Alloc = A;
-
-    #[inline]
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
-        Option::Some(alloc::rc::Rc::allocator(self))
-    }
 }
 
 #[cfg(feature = "rc")]
@@ -186,11 +171,6 @@ where
     A: Allocator,
 {
     type Item = T;
-    type Alloc = A;
-
-    fn try_get_mem_alloc(&self) -> impl Try<Output = &Self::Alloc> {
-        Option::Some(alloc::boxed::Box::<T, A>::allocator(self))
-    }
 }
 
 #[cfg(feature = "box")]
